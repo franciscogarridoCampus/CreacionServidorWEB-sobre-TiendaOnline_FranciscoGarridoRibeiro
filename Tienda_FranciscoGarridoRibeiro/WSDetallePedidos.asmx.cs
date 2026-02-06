@@ -17,35 +17,7 @@ namespace Tienda_FranciscoGarridoRibeiro
             return "Hola a todos";
         }
 
-        // 1. AGREGAR PRODUCTO AL DETALLE
-        [WebMethod]
-        public string AgregarDetalle(int pedidoID, int productoID, int cantidad, decimal precioUnitario)
-        {
-            try
-            {
-                Conexion oConexion = new Conexion();
-                MySqlConnection conexion = oConexion.Conector();
-
-                string query = "INSERT INTO detallepedidos (PedidoID, ProductoID, Cantidad, PrecioUnitario) " +
-                               "VALUES (@pedido, @prod, @cant, @precio)";
-
-                using (MySqlCommand cmd = new MySqlCommand(query, conexion))
-                {
-                    cmd.Parameters.AddWithValue("@pedido", pedidoID);
-                    cmd.Parameters.AddWithValue("@prod", productoID);
-                    cmd.Parameters.AddWithValue("@cant", cantidad);
-                    cmd.Parameters.AddWithValue("@precio", precioUnitario);
-                    cmd.ExecuteNonQuery();
-                }
-                return "Producto agregado al pedido correctamente.";
-            }
-            catch (Exception ex)
-            {
-                return "Error al agregar detalle: " + ex.Message;
-            }
-        }
-
-        // 2. OBTENER DETALLES DE UN PEDIDO ESPECÍFICO (Punto 14 de la actividad)
+        // 1. CONSULTAR DETALLES DE UN PEDIDO
         [WebMethod]
         public List<string> ConsultarDetallePedido(int pedidoID)
         {
@@ -53,23 +25,19 @@ namespace Tienda_FranciscoGarridoRibeiro
             try
             {
                 Conexion oConexion = new Conexion();
-                MySqlConnection conexion = oConexion.Conector();
-
-                // Hacemos un JOIN simple para mostrar el nombre del producto en lugar de solo el ID
-                string query = "SELECT p.Nombre, d.Cantidad, d.PrecioUnitario " +
-                               "FROM detallepedidos d " +
-                               "INNER JOIN productos p ON d.ProductoID = p.ProductoID " +
-                               "WHERE d.PedidoID = @pedido";
-
-                using (MySqlCommand cmd = new MySqlCommand(query, conexion))
+                using (MySqlConnection conexion = oConexion.Conector())
                 {
-                    cmd.Parameters.AddWithValue("@pedido", pedidoID);
-                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    string query = "SELECT p.Nombre, d.Cantidad, d.PrecioUnitario, (d.Cantidad*d.PrecioUnitario) as Subtotal " +
+                                   "FROM detallepedidos d INNER JOIN productos p ON d.ProductoID = p.ProductoID WHERE d.PedidoID=@pedido";
+                    using (MySqlCommand cmd = new MySqlCommand(query, conexion))
                     {
-                        while (reader.Read())
+                        cmd.Parameters.AddWithValue("@pedido", pedidoID);
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
                         {
-                            string fila = $"Producto: {reader["Nombre"]} | Cant: {reader["Cantidad"]} | Precio: {reader["PrecioUnitario"]}";
-                            lista.Add(fila);
+                            while (reader.Read())
+                            {
+                                lista.Add($"Producto: {reader["Nombre"]} | Cant: {reader["Cantidad"]} | Precio Unitario: {reader["PrecioUnitario"]} | Subtotal: {reader["Subtotal"]}");
+                            }
                         }
                     }
                 }
@@ -81,27 +49,78 @@ namespace Tienda_FranciscoGarridoRibeiro
             return lista;
         }
 
-        // 3. ELIMINAR UN ITEM DEL DETALLE
+        // 2. ELIMINAR DETALLE
         [WebMethod]
         public string EliminarDetalle(int detalleID)
         {
             try
             {
                 Conexion oConexion = new Conexion();
-                MySqlConnection conexion = oConexion.Conector();
-                string query = "DELETE FROM detallepedidos WHERE DetalleID = @id";
-
-                using (MySqlCommand cmd = new MySqlCommand(query, conexion))
+                using (MySqlConnection conexion = oConexion.Conector())
                 {
-                    cmd.Parameters.AddWithValue("@id", detalleID);
-                    int filas = cmd.ExecuteNonQuery();
-                    return filas > 0 ? "Detalle eliminado." : "No se encontró el ID.";
+                    string query = "DELETE FROM detallepedidos WHERE DetalleID = @id";
+                    using (MySqlCommand cmd = new MySqlCommand(query, conexion))
+                    {
+                        cmd.Parameters.AddWithValue("@id", detalleID);
+                        int filas = cmd.ExecuteNonQuery();
+                        return filas > 0 ? "Detalle eliminado." : "No se encontró el ID.";
+                    }
                 }
             }
             catch (Exception ex)
             {
                 return "Error: " + ex.Message;
             }
+        }
+
+        // 3. HISTORIAL DE COMPRAS (Pedidos + Detalles con subtotal)
+        [WebMethod]
+        public List<string> HistorialCompras(int usuarioID)
+        {
+            List<string> historial = new List<string>();
+            try
+            {
+                Conexion oConexion = new Conexion();
+                using (MySqlConnection conexion = oConexion.Conector())
+                {
+                    string queryPedidos = "SELECT PedidoID, FechaPedido, Estado FROM pedidos WHERE UsuarioID=@user";
+                    using (MySqlCommand cmdPedidos = new MySqlCommand(queryPedidos, conexion))
+                    {
+                        cmdPedidos.Parameters.AddWithValue("@user", usuarioID);
+                        using (MySqlDataReader readerPedidos = cmdPedidos.ExecuteReader())
+                        {
+                            while (readerPedidos.Read())
+                            {
+                                int pedidoID = Convert.ToInt32(readerPedidos["PedidoID"]);
+                                historial.Add($"Pedido ID: {pedidoID} | Fecha: {readerPedidos["FechaPedido"]} | Estado: {readerPedidos["Estado"]}");
+
+                                // Detalles
+                                using (MySqlConnection conexionDetalle = oConexion.Conector())
+                                {
+                                    string queryDetalle = "SELECT p.Nombre, d.Cantidad, d.PrecioUnitario, (d.Cantidad*d.PrecioUnitario) as Subtotal " +
+                                                          "FROM detallepedidos d INNER JOIN productos p ON d.ProductoID=p.ProductoID WHERE d.PedidoID=@pedido";
+                                    using (MySqlCommand cmdDetalle = new MySqlCommand(queryDetalle, conexionDetalle))
+                                    {
+                                        cmdDetalle.Parameters.AddWithValue("@pedido", pedidoID);
+                                        using (MySqlDataReader readerDetalle = cmdDetalle.ExecuteReader())
+                                        {
+                                            while (readerDetalle.Read())
+                                            {
+                                                historial.Add($"   Producto: {readerDetalle["Nombre"]} | Cant: {readerDetalle["Cantidad"]} | Precio Unitario: {readerDetalle["PrecioUnitario"]} | Subtotal: {readerDetalle["Subtotal"]}");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                historial.Add("Error: " + ex.Message);
+            }
+            return historial;
         }
     }
 }

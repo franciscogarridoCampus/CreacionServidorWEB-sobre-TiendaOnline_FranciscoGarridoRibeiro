@@ -92,25 +92,24 @@ namespace Tienda_FranciscoGarridoRibeiro
             {
                 Conexion oConexion = new Conexion();
                 MySqlConnection conexion = oConexion.Conector();
-                string query = "SELECT NombreCategoria FROM categorias";
+                string query = "SELECT CategoriaID, NombreCategoria FROM categorias";
 
                 using (MySqlCommand cmd = new MySqlCommand(query, conexion))
+                using (MySqlDataReader reader = cmd.ExecuteReader())
                 {
-                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    while (reader.Read())
                     {
-                        while (reader.Read())
-                        {
-                            lista.Add(reader["NombreCategoria"].ToString());
-                        }
+                        // Devuelve ID y Nombre separados por | para fácil lectura en cliente
+                        lista.Add($"{reader["CategoriaID"]}|{reader["NombreCategoria"]}");
                     }
                 }
-                return lista;
             }
             catch (Exception ex)
             {
                 lista.Add("Error: " + ex.Message);
-                return lista;
             }
+            return lista;
         }
+
     }
 }

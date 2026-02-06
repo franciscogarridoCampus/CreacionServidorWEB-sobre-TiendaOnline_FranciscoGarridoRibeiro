@@ -11,7 +11,7 @@ namespace Tienda_FranciscoGarridoRibeiro
     [System.ComponentModel.ToolboxItem(false)]
     public class WSUsuarios : System.Web.Services.WebService
     {
-        // 1. ValidarUsuario (Punto 1): Consulta credenciales y retorna el nombre si es correcto
+        // 1. ValidarUsuario: consulta credenciales y retorna el nombre si es correcto
         [WebMethod]
         public string ValidarUsuario(string nombreUsuario, string contrasena)
         {
@@ -33,7 +33,7 @@ namespace Tienda_FranciscoGarridoRibeiro
             catch (Exception ex) { return "Error de conexión: " + ex.Message; }
         }
 
-        // 2. RegistrarUsuario (Punto 2): Inserta un nuevo usuario en la tabla
+        // 2. RegistrarUsuario: inserta un nuevo usuario y valida duplicados
         [WebMethod]
         public string RegistrarUsuario(string user, string pass, string nombre, string apellido, string email)
         {
@@ -41,6 +41,19 @@ namespace Tienda_FranciscoGarridoRibeiro
             {
                 Conexion oConexion = new Conexion();
                 MySqlConnection conexion = oConexion.Conector();
+
+                // Validar si ya existe NombreUsuario o Email
+                string queryCheck = "SELECT COUNT(*) FROM usuarios WHERE NombreUsuario=@u OR Email=@e";
+                using (MySqlCommand cmdCheck = new MySqlCommand(queryCheck, conexion))
+                {
+                    cmdCheck.Parameters.AddWithValue("@u", user);
+                    cmdCheck.Parameters.AddWithValue("@e", email);
+                    int existe = Convert.ToInt32(cmdCheck.ExecuteScalar());
+                    if (existe > 0)
+                        return "Error: El nombre de usuario o email ya existe.";
+                }
+
+                // Insertar usuario
                 string query = "INSERT INTO usuarios (NombreUsuario, Contrasena, Nombre, Apellido, Email, FechaRegistro) " +
                                "VALUES (@u, @p, @n, @a, @e, @f)";
 
@@ -54,12 +67,13 @@ namespace Tienda_FranciscoGarridoRibeiro
                     cmd.Parameters.AddWithValue("@f", DateTime.Now);
                     cmd.ExecuteNonQuery();
                 }
+
                 return "Usuario registrado con éxito.";
             }
             catch (Exception ex) { return "Error al registrar: " + ex.Message; }
         }
 
-        // 3. ActualizarUsuario (Punto 3): Modifica la información de un usuario existente
+        // 3. ActualizarUsuario: modifica información y valida email duplicado
         [WebMethod]
         public string ActualizarUsuario(int id, string nombre, string apellido, string email)
         {
@@ -67,6 +81,18 @@ namespace Tienda_FranciscoGarridoRibeiro
             {
                 Conexion oConexion = new Conexion();
                 MySqlConnection conexion = oConexion.Conector();
+
+                // Validar que el email no pertenezca a otro usuario
+                string queryCheck = "SELECT COUNT(*) FROM usuarios WHERE Email=@e AND UsuarioID<>@id";
+                using (MySqlCommand cmdCheck = new MySqlCommand(queryCheck, conexion))
+                {
+                    cmdCheck.Parameters.AddWithValue("@e", email);
+                    cmdCheck.Parameters.AddWithValue("@id", id);
+                    int existe = Convert.ToInt32(cmdCheck.ExecuteScalar());
+                    if (existe > 0)
+                        return "Error: El email ya está asociado a otro usuario.";
+                }
+
                 string query = "UPDATE usuarios SET Nombre=@n, Apellido=@a, Email=@e WHERE UsuarioID=@id";
 
                 using (MySqlCommand cmd = new MySqlCommand(query, conexion))
@@ -82,7 +108,7 @@ namespace Tienda_FranciscoGarridoRibeiro
             catch (Exception ex) { return "Error: " + ex.Message; }
         }
 
-        // 4. EliminarUsuario (Punto 4): Elimina por identificador
+        // 4. EliminarUsuario: elimina por ID
         [WebMethod]
         public string EliminarUsuario(int id)
         {
@@ -102,7 +128,7 @@ namespace Tienda_FranciscoGarridoRibeiro
             catch (Exception ex) { return "Error: " + ex.Message; }
         }
 
-        // 5. ObtenerUsuarios (Punto 5): Devuelve lista de usuarios registrados
+        // 5. ObtenerUsuarios: devuelve lista de usuarios registrados
         [WebMethod]
         public List<string> ObtenerUsuarios()
         {
